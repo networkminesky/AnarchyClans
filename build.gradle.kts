@@ -1,0 +1,26 @@
+plugins {
+    id("java-library")
+}
+
+repositories {
+    mavenCentral()
+    maven("https://repo.papermc.io/repository/maven-public/")
+}
+
+dependencies {
+    compileOnly("io.papermc.paper:paper-api:26.3.build.+")
+    compileOnly("org.mongodb:mongodb-driver-sync:5.6.0")
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+}
+
+tasks {
+    processResources {
+        val props = mapOf("version" to version)
+        filesMatching("plugin.yml") {
+            expand(props)
+        }
+    }
+}

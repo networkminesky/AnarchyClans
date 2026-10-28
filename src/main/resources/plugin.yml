@@ -1,0 +1,19 @@
+name: AnarchyClans
+version: '${version}'
+
+main: anarchy.minesky.AnarchyClans
+api-version: '26.3'
+load: POSTWORLD
+
+authors: [ Bruno C. ]
+
+libraries:
+  - "org.mongodb:mongodb-driver-sync:5.6.0"
+
+commands:
+  clan:
+    aliases: [cla]
+  .:
+    aliases: [c]
+  ally:
+    aliases: [aliado]

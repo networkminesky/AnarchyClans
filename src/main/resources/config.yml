@@ -1,0 +1,16 @@
+# configurar database dos clãs
+mongodb:
+  # Link de conexão com o MongoDB. Exemplo: mongodb://localhost:27017
+  uri: ""
+
+  # Nome do banco de dados onde os dados serão armazenados
+  storage-database: ""
+
+# configuraçõs gerais
+clan:
+  price: 1500 # preço fixo para criar o clã
+  tag-limit: 4 # limite de caracteres na tag do clã
+
+  invite:
+    price: 50 # preço fixo para convidar alguém ao clã
+    duration: 5 # duração em minutos do convite
