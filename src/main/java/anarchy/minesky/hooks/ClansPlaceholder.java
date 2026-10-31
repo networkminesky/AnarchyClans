@@ -122,6 +122,10 @@ public class ClansPlaceholder extends PlaceholderExpansion implements Relational
     @Override
     public String onPlaceholderRequest(Player player, @NotNull String identifier) {
         if (player == null) return "";
+        String param = identifier.toLowerCase(Locale.ROOT);
+        if (param.equals("enabled")) {
+            return String.valueOf(isTagEnabled(player));
+        }
 
         Clan clan = ClanHandler.getClanByPlayer(player.getUniqueId());
         if (clan == null) return "";
