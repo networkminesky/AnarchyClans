@@ -18,6 +18,7 @@ public class MongoDBManager {
     private MongoClient client;
     private MongoDatabase db;
     private MongoCollection<Document> clans;
+    private MongoCollection<Document> players;
 
     static {
         silenciarLogsMongo();
@@ -55,6 +56,7 @@ public class MongoDBManager {
             client = MongoClients.create(settings);
             db = client.getDatabase(dbName);
             clans = db.getCollection("clans");
+            players = db.getCollection("players");
             AnarchyClans.l.info("| Conectado ao MongoDB com sucesso!");
         } catch (Exception e) {
             AnarchyClans.l.severe("| Falha ao conectar ao MongoDB: " + e.getMessage());
@@ -66,12 +68,17 @@ public class MongoDBManager {
         return clans;
     }
 
+    public MongoCollection<Document> getPlayers() {
+        return players;
+    }
+
     public void close() {
         if (client != null) {
             MongoClient clientToClose = client;
             client = null;
             db = null;
             clans = null;
+            players = null;
 
             CompletableFuture.runAsync(() -> {
                 try {

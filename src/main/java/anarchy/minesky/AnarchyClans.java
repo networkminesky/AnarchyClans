@@ -11,6 +11,7 @@ import anarchy.minesky.database.PlayerDataManager;
 import anarchy.minesky.enums.ClanChatType;
 import anarchy.minesky.handlers.ClanHandler;
 import anarchy.minesky.handlers.ClanLocatorHandler;
+import anarchy.minesky.listeners.PlayerStatsListener;
 import anarchy.minesky.handlers.InviteHandler;
 import anarchy.minesky.handlers.requests.ClanRequestManager;
 import anarchy.minesky.handlers.requests.ReagroupHandler;
@@ -60,6 +61,8 @@ public final class AnarchyClans extends JavaPlugin {
         this.locator = new ClanLocatorHandler(this);
         this.locator.syncAllOnlinePlayers();
         this.playerData = new PlayerDataManager();
+        getServer().getPluginManager().registerEvents(new PlayerStatsListener(this), this);
+        PlayerStatsListener.syncOnlinePlayers(this);
         registerCommands();
         registerHooks();
         initializeTicks();
@@ -79,6 +82,10 @@ public final class AnarchyClans extends JavaPlugin {
 
         if (handler != null) {
             handler.close();
+        }
+
+        if (playerData != null) {
+            playerData.shutdown();
         }
 
         instance = null;
