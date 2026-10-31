@@ -7,20 +7,20 @@ import org.bukkit.configuration.file.FileConfiguration;
 public class Config {
     public static String MongoUri;
     public static String StorageDatabase;
-    public static double GuildCreatePrice;
-    public static int GuildTagLimit;
-    public static double GuildInvitePrice;
-    public static int GuildInviteDuration;
+    public static double ClanPrice;
+    public static int TagLimit;
+    public static double InvitePrice;
+    public static int InviteDuration;
 
     public static void loadConfig() {
         FileConfiguration config = AnarchyClans.getInstance().getConfig();
 
         MongoUri = getString(config, "mongodb.uri");
         StorageDatabase = getString(config, "mongodb.storage-database");
-        GuildCreatePrice = config.getDouble("guilds.price", 0);
-        GuildTagLimit = config.getInt("clan.tag-limit", 4);
-        GuildInvitePrice = config.getDouble("clan.invite.price", 0);
-        GuildInviteDuration = config.getInt("clan.invite.duration", 0);
+        ClanPrice = config.getDouble("clan.price", 0);
+        TagLimit = config.getInt("clan.tag-limit", 4);
+        InvitePrice = config.getDouble("clan.invite.price", 0);
+        InviteDuration = config.getInt("clan.invite.duration", 0);
 
         config.addDefault("clan.price", 0.0);
         config.addDefault("clan.tag-limit", 4);

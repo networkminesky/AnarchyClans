@@ -4,6 +4,7 @@ version: '${version}'
 main: anarchy.minesky.AnarchyClans
 api-version: '26.3'
 load: POSTWORLD
+folia-supported: true
 
 authors: [ Bruno C. ]
 

@@ -19,7 +19,13 @@ public class MongoDBManager {
     private MongoDatabase db;
     private MongoCollection<Document> clans;
 
+    static {
+        silenciarLogsMongo();
+    }
+
     public void connect(String uri, String dbName) {
+        silenciarLogsMongo();
+
         ServerApi serverApi = ServerApi.builder()
                 .version(ServerApiVersion.V1)
                 .build();
@@ -88,6 +94,34 @@ public class MongoDBManager {
             return true;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    public static void silenciarLogsMongo() {
+        String[] loggers = {
+                "org.mongodb.driver",
+                "org.mongodb.driver.cluster",
+                "org.mongodb.driver.client",
+                "org.mongodb.driver.connection"
+        };
+
+        try {
+            Class<?> configuratorClass = Class.forName("org.apache.logging.log4j.core.config.Configurator");
+            Class<?> levelClass = Class.forName("org.apache.logging.log4j.Level");
+            Object warnLevel = levelClass.getField("WARN").get(null);
+
+            java.lang.reflect.Method setLevel = configuratorClass.getMethod("setLevel", String.class, levelClass);
+            for (String loggerName : loggers) {
+                setLevel.invoke(null, loggerName, warnLevel);
+            }
+        } catch (Throwable ignored) {
+        }
+
+        try {
+            for (String loggerName : loggers) {
+                java.util.logging.Logger.getLogger(loggerName).setLevel(java.util.logging.Level.WARNING);
+            }
+        } catch (Throwable ignored) {
         }
     }
 }

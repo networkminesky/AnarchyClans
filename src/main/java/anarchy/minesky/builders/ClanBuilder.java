@@ -5,22 +5,52 @@ import org.bukkit.entity.Player;
 
 import java.text.Normalizer;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 public class ClanBuilder {
-    private String displayName;
-    private String tag;
-    private final UUID lider;
+    private static final Pattern DIACRITICS = Pattern.compile("\\p{InCombiningDiacriticalMarks}+");
+    private static final Pattern NON_ALPHANUMERIC = Pattern.compile("[^a-zA-Z0-9]+");
+    private static final Pattern TRIM_UNDERSCORES = Pattern.compile("^_+|_+$");
 
-    public ClanBuilder(UUID uuid) {
-        this.lider = uuid;
+    private String name;
+    private String tag;
+    private UUID leader;
+
+    public ClanBuilder() {}
+
+    public ClanBuilder(UUID leader) {
+        this.leader = leader;
+    }
+
+    public ClanBuilder(Player leader) {
+        this(leader != null ? leader.getUniqueId() : null);
+    }
+
+    public ClanBuilder name(String name) {
+        this.name = name;
+        return this;
+    }
+
+    public ClanBuilder tag(String tag) {
+        this.tag = tag;
+        return this;
+    }
+
+    public ClanBuilder leader(UUID leader) {
+        this.leader = leader;
+        return this;
+    }
+
+    public String getName() {
+        return name;
     }
 
     public String getDisplayName() {
-        return displayName;
+        return name;
     }
 
     public void setName(String name) {
-        this.displayName = name;
+        this.name = name;
     }
 
     public String getTag() {
@@ -31,21 +61,32 @@ public class ClanBuilder {
         this.tag = tag;
     }
 
+    public UUID getLeaderId() {
+        return leader;
+    }
+
+    public Player getLeader() {
+        return leader != null ? Bukkit.getPlayer(leader) : null;
+    }
+
     public Player getLider() {
-        return Bukkit.getPlayer(lider);
+        return getLeader();
     }
 
     public String generateId() {
-        if (displayName == null || displayName.isEmpty()) return "";
+        return generateId(this.name);
+    }
 
-        String baseId = Normalizer.normalize(displayName, Normalizer.Form.NFD)
-                .replaceAll("[^\\p{ASCII}]", "")
-                .replaceAll("[^a-zA-Z0-9]+", "_")
-                .replaceAll("_+", "_")
-                .replaceAll("^_|_$", "")
-                .toLowerCase();
+    public static String generateId(String name) {
+        if (name == null || name.isBlank()) return "";
 
-        String uniqueId = UUID.randomUUID().toString().split("-")[0];
-        return baseId + "-" + uniqueId;
+        String normalized = Normalizer.normalize(name, Normalizer.Form.NFD);
+        String withoutAccents = DIACRITICS.matcher(normalized).replaceAll("");
+
+        String clean = NON_ALPHANUMERIC.matcher(withoutAccents).replaceAll("_");
+        clean = TRIM_UNDERSCORES.matcher(clean).replaceAll("").toLowerCase();
+
+        String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
+        return clean.isEmpty() ? uniqueSuffix : clean + "-" + uniqueSuffix;
     }
 }
