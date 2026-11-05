@@ -7,6 +7,7 @@ import com.mongodb.client.model.Projections;
 import com.mongodb.client.model.Sorts;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -14,8 +15,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class PlayerStatsLeaderboardCache {
 
@@ -32,22 +31,26 @@ public class PlayerStatsLeaderboardCache {
         Board(String sortField) {
             this.sortField = sortField;
         }
+
+        String statKey() {
+            return sortField.contains(".") ? sortField.split("\\.", 2)[1] : sortField;
+        }
     }
 
     public record Entry(String nickname, int value) {
     }
 
+    private record TopQuery(Board board, int rank, boolean value) {
+    }
+
     private static final int TOP_SIZE = 10;
     private static final long REFRESH_TICKS = 20L * 30;
-
-    private static final Pattern PLACEHOLDER = Pattern.compile(
-            "^(?:(weekly)_(kills|deaths|blocks)|(kills|deaths|blocks))_(\\d{1,2})(?:_(name|value))?$"
-    );
 
     private final MongoCollection<Document> players;
     private final AtomicReference<Map<Board, List<Entry>>> cache =
             new AtomicReference<>(Map.of());
     private ScheduledTask refreshTask;
+    private volatile boolean refreshScheduled;
 
     public PlayerStatsLeaderboardCache(MongoCollection<Document> players) {
         this.players = players;
@@ -74,56 +77,86 @@ public class PlayerStatsLeaderboardCache {
         refreshAsync();
     }
 
+    /**
+     * Só lê cache em memória (atualizado async pelo Mongo). Param: {@code kills_1_name}, etc.
+     */
     public String resolvePlaceholder(String param) {
+        TopQuery query = parse(param);
+        if (query == null) {
+            return null;
+        }
+        if (query.rank() < 1 || query.rank() > TOP_SIZE) {
+            return "";
+        }
+
+        List<Entry> entries = cache.get().getOrDefault(query.board(), List.of());
+        if (query.rank() > entries.size()) {
+            return "";
+        }
+
+        Entry entry = entries.get(query.rank() - 1);
+        return query.value() ? String.valueOf(entry.value()) : entry.nickname();
+    }
+
+    private static TopQuery parse(String param) {
         if (param == null || param.isEmpty()) {
             return null;
         }
-        Matcher m = PLACEHOLDER.matcher(param.toLowerCase(Locale.ROOT));
-        if (!m.matches()) {
+        String lower = param.toLowerCase(Locale.ROOT);
+        boolean weekly = lower.startsWith("weekly_");
+        String rest = weekly ? lower.substring(7) : lower;
+
+        String stat;
+        String rankPart;
+        String suffix;
+
+        if (rest.startsWith("kills_")) {
+            stat = "kills";
+            rest = rest.substring(6);
+        } else if (rest.startsWith("deaths_")) {
+            stat = "deaths";
+            rest = rest.substring(7);
+        } else if (rest.startsWith("blocks_")) {
+            stat = "blocks";
+            rest = rest.substring(7);
+        } else {
             return null;
         }
 
-        Board board = resolveBoard(m.group(1), m.group(2), m.group(3));
-        if (board == null) {
-            return null;
+        int underscore = rest.indexOf('_');
+        if (underscore < 0) {
+            rankPart = rest;
+            suffix = null;
+        } else {
+            rankPart = rest.substring(0, underscore);
+            suffix = rest.substring(underscore + 1);
         }
 
         int rank;
         try {
-            rank = Integer.parseInt(m.group(4));
+            rank = Integer.parseInt(rankPart);
         } catch (NumberFormatException e) {
             return null;
         }
-        if (rank < 1 || rank > TOP_SIZE) {
-            return "";
-        }
 
-        List<Entry> entries = cache.get().getOrDefault(board, List.of());
-        if (rank > entries.size()) {
-            return "";
+        boolean wantValue = "value".equals(suffix);
+        Board board = resolveBoard(weekly, stat);
+        if (board == null) {
+            return null;
         }
-
-        Entry entry = entries.get(rank - 1);
-        String part = m.group(5);
-        if ("value".equals(part)) {
-            return String.valueOf(entry.value());
-        }
-        if ("name".equals(part) || part == null) {
-            return entry.nickname();
-        }
-        return entry.nickname();
+        return new TopQuery(board, rank, wantValue);
     }
 
-    private static Board resolveBoard(String weeklyFlag, String weeklyStat, String alltimeStat) {
-        if (weeklyFlag != null) {
-            return switch (weeklyStat) {
+    private static Board resolveBoard(boolean weekly, String stat) {
+        if (weekly) {
+            return switch (stat) {
                 case "kills" -> Board.WEEKLY_KILLS;
                 case "deaths" -> Board.WEEKLY_DEATHS;
                 case "blocks" -> Board.WEEKLY_BLOCKS;
                 default -> null;
             };
         }
-        return switch (alltimeStat) {
+        return switch (stat) {
             case "kills" -> Board.ALLTIME_KILLS;
             case "deaths" -> Board.ALLTIME_DEATHS;
             case "blocks" -> Board.ALLTIME_BLOCKS;
@@ -132,52 +165,76 @@ public class PlayerStatsLeaderboardCache {
     }
 
     private void refreshAsync() {
-        if (players == null) {
+        if (players == null || refreshScheduled) {
             return;
         }
-        AnarchyClans.getInstance().getPlayerData().runOnDbThread(() -> {
-            Map<Board, List<Entry>> next = new EnumMap<>(Board.class);
-            String period = WeeklyPeriod.currentKey();
-
-            next.put(Board.ALLTIME_KILLS, fetchTop("kills", null));
-            next.put(Board.ALLTIME_DEATHS, fetchTop("deaths", null));
-            next.put(Board.ALLTIME_BLOCKS, fetchTop("blocks", null));
-            next.put(Board.WEEKLY_KILLS, fetchTop("weekly.kills", period));
-            next.put(Board.WEEKLY_DEATHS, fetchTop("weekly.deaths", period));
-            next.put(Board.WEEKLY_BLOCKS, fetchTop("weekly.blocks", period));
-
-            cache.set(Map.copyOf(next));
-        });
+        var plugin = AnarchyClans.getInstance();
+        if (plugin == null || plugin.getPlayerData() == null) {
+            return;
+        }
+        refreshScheduled = true;
+        plugin.getPlayerData().runOnDbThread(this::rebuildCache);
     }
 
-    private List<Entry> fetchTop(String sortField, String weeklyPeriod) {
-        var find = weeklyPeriod != null
-                ? players.find(Filters.eq("weekly.period", weeklyPeriod))
-                : players.find();
+    private void rebuildCache() {
+        try {
+            Map<Board, List<Entry>> next = new EnumMap<>(Board.class);
+            for (Board board : Board.values()) {
+                next.put(board, fetchTop(board));
+            }
+            cache.set(Map.copyOf(next));
+        } catch (Exception e) {
+            AnarchyClans.l.warning("| Falha ao atualizar cache de tops: " + e.getMessage());
+        } finally {
+            refreshScheduled = false;
+        }
+    }
 
-        String valueKey = sortField.contains(".") ? sortField.split("\\.", 2)[1] : sortField;
+    private List<Entry> fetchTop(Board board) {
+        String period = WeeklyPeriod.currentKey();
+        Bson filter = switch (board) {
+            case WEEKLY_KILLS, WEEKLY_DEATHS, WEEKLY_BLOCKS ->
+                    Filters.eq("weekly.period", period);
+            default -> new Document();
+        };
 
         List<Entry> result = new ArrayList<>(TOP_SIZE);
-        for (Document doc : find
-                .projection(Projections.include(sortField, "latest-nickname", "first-nickname"))
-                .sort(Sorts.descending(sortField))
-                .limit(TOP_SIZE)) {
+        for (Document doc : players.find(filter)
+                .projection(Projections.include(
+                        board.sortField,
+                        "kills", "deaths", "blocks",
+                        "latest-nickname", "first-nickname", "weekly"))
+                .sort(Sorts.descending(board.sortField))
+                .limit(100)) {
 
-            int value = readNestedInt(doc, sortField, valueKey);
+            int value = readStat(doc, board);
             if (value <= 0) {
                 continue;
             }
             result.add(new Entry(resolveNickname(doc), value));
+            if (result.size() >= TOP_SIZE) {
+                break;
+            }
         }
         return List.copyOf(result);
     }
 
-    private static int readNestedInt(Document doc, String path, String leaf) {
-        if (path.contains(".")) {
-            Document nested = doc.get("weekly", Document.class);
-            return nested != null ? nested.getInteger(leaf, 0) : 0;
+    private static int readStat(Document doc, Board board) {
+        if (board.sortField.contains(".")) {
+            Document weekly = doc.get("weekly", Document.class);
+            if (weekly == null) {
+                return 0;
+            }
+            return readNumber(weekly.get(board.statKey()));
         }
-        return doc.getInteger(leaf, 0);
+        return readNumber(doc.get(board.statKey()));
+    }
+
+    private static int readNumber(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        return 0;
     }
 
     private static String resolveNickname(Document doc) {

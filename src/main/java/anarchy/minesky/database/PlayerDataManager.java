@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -38,6 +39,13 @@ public class PlayerDataManager {
     });
 
     private ScheduledTask weeklyResetTask;
+    private final ConcurrentHashMap<UUID, CachedStats> statsCache = new ConcurrentHashMap<>();
+
+    private static final class CachedStats {
+        volatile int kills;
+        volatile int deaths;
+        volatile int blocks;
+    }
 
     public PlayerDataManager() {
         this.players = AnarchyClans.getInstance().mm.getPlayers();
@@ -62,7 +70,10 @@ public class PlayerDataManager {
         if (uuid == null || nickname == null || nickname.isEmpty() || players == null) {
             return;
         }
-        executor.execute(() -> upsertNickname(uuid, nickname));
+        executor.execute(() -> {
+            upsertNickname(uuid, nickname);
+            refreshStatsCache(uuid);
+        });
     }
 
     public void addKill(UUID uuid, String nickname) {
@@ -77,16 +88,66 @@ public class PlayerDataManager {
         increment(uuid, nickname, FIELD_BLOCKS);
     }
 
+    public int getKillsSync(UUID uuid) {
+        return readCached(uuid).kills;
+    }
+
+    public int getDeathsSync(UUID uuid) {
+        return readCached(uuid).deaths;
+    }
+
+    public int getBlocksSync(UUID uuid) {
+        return readCached(uuid).blocks;
+    }
+
+    private CachedStats readCached(UUID uuid) {
+        if (uuid == null) {
+            return emptyStats();
+        }
+        CachedStats stats = statsCache.get(uuid);
+        return stats != null ? stats : emptyStats();
+    }
+
+    private static CachedStats emptyStats() {
+        return new CachedStats();
+    }
+
     public void getKills(UUID uuid, Consumer<Integer> callback) {
+        if (tryCallbackFromCache(uuid, callback, FIELD_KILLS)) {
+            return;
+        }
         fetchStat(uuid, FIELD_KILLS, callback);
     }
 
     public void getDeaths(UUID uuid, Consumer<Integer> callback) {
+        if (tryCallbackFromCache(uuid, callback, FIELD_DEATHS)) {
+            return;
+        }
         fetchStat(uuid, FIELD_DEATHS, callback);
     }
 
     public void getBlocks(UUID uuid, Consumer<Integer> callback) {
+        if (tryCallbackFromCache(uuid, callback, FIELD_BLOCKS)) {
+            return;
+        }
         fetchStat(uuid, FIELD_BLOCKS, callback);
+    }
+
+    private boolean tryCallbackFromCache(UUID uuid, Consumer<Integer> callback, String field) {
+        if (callback == null || uuid == null) {
+            return false;
+        }
+        CachedStats stats = statsCache.get(uuid);
+        if (stats == null) {
+            return false;
+        }
+        callback.accept(switch (field) {
+            case FIELD_KILLS -> stats.kills;
+            case FIELD_DEATHS -> stats.deaths;
+            case FIELD_BLOCKS -> stats.blocks;
+            default -> 0;
+        });
+        return true;
     }
 
     public void getSpy(UUID uuid, Consumer<Boolean> callback) {
@@ -148,6 +209,8 @@ public class PlayerDataManager {
             int deaths = FIELD_DEATHS.equals(field) ? 1 : 0;
             int blocks = FIELD_BLOCKS.equals(field) ? 1 : 0;
             players.insertOne(newDocument(id, nick, nick, kills, deaths, blocks));
+            putCache(id, kills, deaths, blocks);
+            maybeInvalidateLeaderboard(field);
             return;
         }
 
@@ -160,7 +223,59 @@ public class PlayerDataManager {
                         Updates.inc(WEEKLY + "." + field, 1)
                 )
         );
+        bumpCache(uuid, field);
         applyLatestNickname(existing, id, nick);
+        maybeInvalidateLeaderboard(field);
+    }
+
+    /** Blocks atualizam o top no refresh periódico; kills/deaths disparam rebuild async. */
+    private void maybeInvalidateLeaderboard(String field) {
+        if (!FIELD_BLOCKS.equals(field)) {
+            leaderboardCache.invalidate();
+        }
+    }
+
+    private void putCache(String id, int kills, int deaths, int blocks) {
+        UUID uuid = UUID.fromString(id);
+        CachedStats stats = statsCache.computeIfAbsent(uuid, u -> new CachedStats());
+        stats.kills = kills;
+        stats.deaths = deaths;
+        stats.blocks = blocks;
+    }
+
+    private void bumpCache(UUID uuid, String field) {
+        CachedStats stats = statsCache.computeIfAbsent(uuid, u -> new CachedStats());
+        switch (field) {
+            case FIELD_KILLS -> stats.kills++;
+            case FIELD_DEATHS -> stats.deaths++;
+            case FIELD_BLOCKS -> stats.blocks++;
+            default -> {
+            }
+        }
+    }
+
+    private void refreshStatsCache(UUID uuid) {
+        if (players == null || uuid == null) {
+            return;
+        }
+        Document doc = players.find(Filters.eq("_id", uuid.toString())).first();
+        if (doc == null) {
+            statsCache.remove(uuid);
+            return;
+        }
+        putCache(
+                uuid.toString(),
+                readNumber(doc.get(FIELD_KILLS)),
+                readNumber(doc.get(FIELD_DEATHS)),
+                readNumber(doc.get(FIELD_BLOCKS))
+        );
+    }
+
+    private static int readNumber(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        return 0;
     }
 
     private Document newDocument(String id, String firstNick, String latestNick, int kills, int deaths, int blocks) {
@@ -262,7 +377,15 @@ public class PlayerDataManager {
         }
         executor.execute(() -> {
             Document doc = players.find(Filters.eq("_id", uuid.toString())).first();
-            int value = doc != null ? doc.getInteger(field, 0) : 0;
+            int value = doc != null ? readNumber(doc.get(field)) : 0;
+            if (doc != null) {
+                putCache(
+                        uuid.toString(),
+                        readNumber(doc.get(FIELD_KILLS)),
+                        readNumber(doc.get(FIELD_DEATHS)),
+                        readNumber(doc.get(FIELD_BLOCKS))
+                );
+            }
             callback.accept(value);
         });
     }
