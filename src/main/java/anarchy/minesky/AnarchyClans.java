@@ -16,6 +16,7 @@ import anarchy.minesky.handlers.InviteHandler;
 import anarchy.minesky.handlers.requests.ClanRequestManager;
 import anarchy.minesky.handlers.requests.ReagroupHandler;
 import anarchy.minesky.hooks.ClansPlaceholder;
+import anarchy.minesky.hooks.PlayerStatsTopPlaceholder;
 import com.mongodb.client.MongoCollection;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bson.Document;
@@ -40,6 +41,7 @@ public final class AnarchyClans extends JavaPlugin {
     private ClanRequestManager requestManager;
     private ClanLocatorHandler locator;
     private ClansPlaceholder clansPlaceholder;
+    private PlayerStatsTopPlaceholder statsTopPlaceholder;
     private ScheduledTask autoSaveTask;
     private PlayerDataManager playerData;
 
@@ -79,6 +81,9 @@ public final class AnarchyClans extends JavaPlugin {
 
         if (clansPlaceholder != null) {
             clansPlaceholder.unregister();
+        }
+        if (statsTopPlaceholder != null) {
+            statsTopPlaceholder.unregister();
         }
 
         if (handler != null) {
@@ -131,6 +136,8 @@ public final class AnarchyClans extends JavaPlugin {
             l.info("Registrando hook do PlaceholderAPI...");
             clansPlaceholder = new ClansPlaceholder(this);
             clansPlaceholder.register();
+            statsTopPlaceholder = new PlayerStatsTopPlaceholder(this);
+            statsTopPlaceholder.register();
         }
     }
 

@@ -122,13 +122,7 @@ public class ClansPlaceholder extends PlaceholderExpansion implements Relational
     @Override
     public String onPlaceholderRequest(Player player, @NotNull String identifier) {
         if (player == null) return "";
-
         String param = identifier.toLowerCase(Locale.ROOT);
-        String leaderboard = resolveLeaderboardPlaceholder(param);
-        if (leaderboard != null) {
-            return leaderboard;
-        }
-
         if (param.equals("enabled")) {
             return String.valueOf(isTagEnabled(player));
         }
@@ -144,12 +138,6 @@ public class ClansPlaceholder extends PlaceholderExpansion implements Relational
     public String onPlaceholderRequest(Player viewer, Player target, @NotNull String identifier) {
         if (viewer == null || target == null) return "";
 
-        String param = identifier.toLowerCase(Locale.ROOT);
-        String leaderboard = resolveLeaderboardPlaceholder(param);
-        if (leaderboard != null) {
-            return leaderboard;
-        }
-
         boolean showTag = isTagEnabled(viewer);
         if (!showTag) {
             return "";
@@ -159,15 +147,6 @@ public class ClansPlaceholder extends PlaceholderExpansion implements Relational
         if (clan == null) return "";
 
         return processPlaceholders(viewer, target, clan, identifier, true);
-    }
-
-    private String resolveLeaderboardPlaceholder(String param) {
-        var playerData = plugin.getPlayerData();
-        if (playerData == null) {
-            return "";
-        }
-        String result = playerData.getLeaderboardCache().resolvePlaceholder(param);
-        return result != null ? result : null;
     }
 
     private String processPlaceholders(Player viewer, Player target, Clan clan, String identifier, boolean showTag) {

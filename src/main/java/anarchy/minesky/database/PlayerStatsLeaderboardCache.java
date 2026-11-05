@@ -41,7 +41,7 @@ public class PlayerStatsLeaderboardCache {
     private static final long REFRESH_TICKS = 20L * 30;
 
     private static final Pattern PLACEHOLDER = Pattern.compile(
-            "^top_(?:(weekly)_(kills|deaths|blocks)|(kills|deaths|blocks))_(\\d{1,2})(?:_(name|value))?$"
+            "^(?:(weekly)_(kills|deaths|blocks)|(kills|deaths|blocks))_(\\d{1,2})(?:_(name|value))?$"
     );
 
     private final MongoCollection<Document> players;
