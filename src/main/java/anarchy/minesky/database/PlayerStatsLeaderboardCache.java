@@ -200,10 +200,7 @@ public class PlayerStatsLeaderboardCache {
 
         List<Entry> result = new ArrayList<>(TOP_SIZE);
         for (Document doc : players.find(filter)
-                .projection(Projections.include(
-                        board.sortField,
-                        "kills", "deaths", "blocks",
-                        "latest-nickname", "first-nickname", "weekly"))
+                .projection(projectionFor(board))
                 .sort(Sorts.descending(board.sortField))
                 .limit(100)) {
 
@@ -217,6 +214,14 @@ public class PlayerStatsLeaderboardCache {
             }
         }
         return List.copyOf(result);
+    }
+
+    /** Evita path collision (ex.: {@code weekly.kills} + {@code weekly} no mesmo projection). */
+    private static Bson projectionFor(Board board) {
+        if (board.sortField.contains(".")) {
+            return Projections.include("weekly", "latest-nickname", "first-nickname");
+        }
+        return Projections.include("kills", "deaths", "blocks", "latest-nickname", "first-nickname");
     }
 
     private static int readStat(Document doc, Board board) {
