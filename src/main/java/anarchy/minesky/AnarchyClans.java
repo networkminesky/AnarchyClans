@@ -61,6 +61,7 @@ public final class AnarchyClans extends JavaPlugin {
         this.locator = new ClanLocatorHandler(this);
         this.locator.syncAllOnlinePlayers();
         this.playerData = new PlayerDataManager();
+        this.playerData.start(this);
         getServer().getPluginManager().registerEvents(new PlayerStatsListener(this), this);
         PlayerStatsListener.syncOnlinePlayers(this);
         registerCommands();
