@@ -10,6 +10,11 @@ public abstract class SubCommand {
     public abstract String getUsage();
     public abstract List<String> getAliases();
     public abstract boolean getAdminCommand();
+
+    public String getPermission() {
+        return getAdminCommand() ? null : "anarchyclans.command." + getName();
+    }
+
     public abstract void perform(Player player, String[] args);
 
     public boolean matches(String input) {

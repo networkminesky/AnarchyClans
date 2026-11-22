@@ -18,3 +18,81 @@ commands:
     aliases: [c]
   ally:
     aliases: [aliado]
+
+permissions:
+  anarchyclans.command.*:
+    description: Todos os comandos públicos de clã
+    default: true
+    children:
+      anarchyclans.command.criar: true
+      anarchyclans.command.editar: true
+      anarchyclans.command.desbandar: true
+      anarchyclans.command.abandonar: true
+      anarchyclans.command.convidar: true
+      anarchyclans.command.aceitar: true
+      anarchyclans.command.rejeitar: true
+      anarchyclans.command.expulsar: true
+      anarchyclans.command.promover: true
+      anarchyclans.command.rebaixar: true
+      anarchyclans.command.confiar: true
+      anarchyclans.command.membros: true
+      anarchyclans.command.base: true
+      anarchyclans.command.banco: true
+      anarchyclans.command.estandarte: true
+      anarchyclans.command.aliado: true
+      anarchyclans.command.rival: true
+      anarchyclans.command.reagrupar: true
+  anarchyclans.command.criar:
+    description: Permite usar /clan criar
+    default: true
+  anarchyclans.command.editar:
+    description: Permite usar /clan editar
+    default: true
+  anarchyclans.command.desbandar:
+    description: Permite usar /clan desbandar
+    default: true
+  anarchyclans.command.abandonar:
+    description: Permite usar /clan abandonar
+    default: true
+  anarchyclans.command.convidar:
+    description: Permite usar /clan convidar
+    default: true
+  anarchyclans.command.aceitar:
+    description: Permite usar /clan aceitar
+    default: true
+  anarchyclans.command.rejeitar:
+    description: Permite usar /clan rejeitar
+    default: true
+  anarchyclans.command.expulsar:
+    description: Permite usar /clan expulsar
+    default: true
+  anarchyclans.command.promover:
+    description: Permite usar /clan promover
+    default: true
+  anarchyclans.command.rebaixar:
+    description: Permite usar /clan rebaixar
+    default: true
+  anarchyclans.command.confiar:
+    description: Permite usar /clan confiar
+    default: true
+  anarchyclans.command.membros:
+    description: Permite usar /clan membros
+    default: true
+  anarchyclans.command.base:
+    description: Permite usar /clan base
+    default: true
+  anarchyclans.command.banco:
+    description: Permite usar /clan banco
+    default: true
+  anarchyclans.command.estandarte:
+    description: Permite usar /clan estandarte
+    default: true
+  anarchyclans.command.aliado:
+    description: Permite usar /clan aliado
+    default: true
+  anarchyclans.command.rival:
+    description: Permite usar /clan rival
+    default: true
+  anarchyclans.command.reagrupar:
+    description: Permite usar /clan reagrupar
+    default: true

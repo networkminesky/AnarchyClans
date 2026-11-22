@@ -13,7 +13,6 @@ import org.bukkit.Sound;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabExecutor;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
@@ -58,8 +57,27 @@ public class ClanCommand implements CommandExecutor {
         Collections.addAll(this.subCommands, commands);
     }
 
-    private Optional<SubCommand> getSubCommand(String name) {
-        return subCommands.stream().filter(cmd -> cmd.matches(name)).findFirst();
+    public Set<SubCommand> getSubCommands() {
+        return Collections.unmodifiableSet(subCommands);
+    }
+
+    public Optional<SubCommand> getSubCommand(String name) {
+        return resolveSubCommand(name, false);
+    }
+
+    public Optional<SubCommand> getAdminSubCommand(String name) {
+        return resolveSubCommand(name, true).filter(SubCommand::getAdminCommand);
+    }
+
+    private Optional<SubCommand> resolveSubCommand(String name, boolean preferAdmin) {
+        List<SubCommand> matches = subCommands.stream().filter(cmd -> cmd.matches(name)).toList();
+        if (matches.isEmpty()) return Optional.empty();
+        if (matches.size() == 1) return Optional.of(matches.getFirst());
+
+        Optional<SubCommand> preferred = matches.stream()
+                .filter(cmd -> cmd.getAdminCommand() == preferAdmin)
+                .findFirst();
+        return preferred.isPresent() ? preferred : Optional.of(matches.getFirst());
     }
 
     @Override
@@ -93,7 +111,7 @@ public class ClanCommand implements CommandExecutor {
             }
 
             String adminCmd = args[1];
-            Optional<SubCommand> sub = getSubCommand(adminCmd).filter(SubCommand::getAdminCommand);
+            Optional<SubCommand> sub = getAdminSubCommand(adminCmd);
 
             if (sub.isEmpty()) {
                 sendError(player, "&cSubcomando de admin não encontrado.");
@@ -109,6 +127,10 @@ public class ClanCommand implements CommandExecutor {
                 sendError(player, "&cComando não encontrado. Use /clan ajuda.");
                 return;
             }
+            if (!canUse(player, sub)) {
+                sendError(player, "&cVocê não tem permissão.");
+                return;
+            }
             sub.perform(player, args);
         }, () -> sendError(player, "&cComando não encontrado. Use /clan ajuda."));
 
@@ -119,9 +141,17 @@ public class ClanCommand implements CommandExecutor {
         s.sendMessage(Utils.c("&8----------------------------------------"));
         s.sendMessage(Utils.c("&6&lComandos do Clã:"));
         subCommands.stream()
-                .filter(sub -> !sub.getAdminCommand() || s.hasPermission("anarchyclans.admin"))
+                .filter(sub -> canUse(s, sub))
                 .forEach(sub -> s.sendMessage(Utils.c(" &e" + sub.getUsage() + " &7- " + sub.getDescription())));
         s.sendMessage(Utils.c("&8----------------------------------------"));
+    }
+
+    public static boolean canUse(CommandSender sender, SubCommand sub) {
+        if (sub.getAdminCommand()) {
+            return sender.hasPermission("anarchyclans.admin");
+        }
+        String permission = sub.getPermission();
+        return permission == null || sender.hasPermission(permission);
     }
 
     public static void sendError(Player player, String message) {

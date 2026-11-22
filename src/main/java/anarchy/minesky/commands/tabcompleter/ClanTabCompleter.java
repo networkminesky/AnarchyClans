@@ -1,7 +1,7 @@
 package anarchy.minesky.commands.tabcompleter;
 
-import anarchy.minesky.data.Clan;
-import anarchy.minesky.handlers.ClanHandler;
+import anarchy.minesky.commands.ClanCommand;
+import anarchy.minesky.commands.subcommands.SubCommand;
 import anarchy.minesky.utils.Utils;
 import org.bukkit.Sound;
 import org.bukkit.command.Command;
@@ -18,90 +18,67 @@ import java.util.List;
 
 public class ClanTabCompleter implements TabCompleter {
 
-    private static final List<String> SUB_COMMANDS = List.of(
-            "criar", "editar", "acabar", "sair", "expulsar", "promover", "rebaixar",
-            "fogo-amigo", "base", "banco", "convidar", "aceitar", "rejeitar", "estandarte",
-            "aliado", "rival", "anunciar", "mural", "ajuda", "lista", "membros",
-            "coordenadas", "reagrupar", "guerra", "traidor", "traidores", "lista-negra",
-            "confiar"
-    );
-
-    private static final List<String> ADMIN_SUB_COMMANDS = List.of(
-            "banco-admin", "promover-admin", "rebaixar-admin", "forçar-entrada",
-            "resetar-kdr", "dados", "fogo-amigo-global", "spy", "reload", "reconnect", "mural-admin"
-    );
+    private final ClanCommand clanCommand;
 
     private static final List<String> ROLES = List.of("Sub-líder", "Capitão", "Recrutador", "Leal", "Membro");
 
+    public ClanTabCompleter(ClanCommand clanCommand) {
+        this.clanCommand = clanCommand;
+    }
+
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender s, @NotNull Command cmd, @NotNull String label, @NotNull String[] args) {
+        if (args.length == 0) return List.of();
+
         if (s instanceof Player player) {
             player.playSound(player.getLocation(), Sound.ENTITY_CHICKEN_EGG, 0.5f, 1f);
         }
 
         Player player = s instanceof Player p ? p : null;
-        String sub = args[0].toLowerCase();
+        String sub = canonical(args[0]);
 
         return switch (args.length) {
-            case 1 -> {
-                boolean hasAdmin = s.hasPermission("anarchyclans.admin") ||
-                        s.hasPermission("anarchyclans.reload") ||
-                        s.hasPermission("anarchyclans.spy");
+            case 1 -> match(args[0], visibleCommands(s));
 
-                List<String> available = new ArrayList<>(SUB_COMMANDS);
-                if (hasAdmin) available.add("admin");
-
-                yield match(args[0], available);
+            case 2 -> {
+                if (!sub.equals("admin") && !canUsePublic(s, sub)) yield List.of();
+                yield switch (sub) {
+                    case "membros" -> match(args[1], Utils.getClansTags());
+                    case "banco" -> match(args[1], List.of("depositar", "sacar", "saldo"));
+                    case "reagrupar" -> match(args[1], List.of("base"));
+                    case "base" -> match(args[1], List.of("setar", "teleportar"));
+                    case "convidar" -> match(args[1], Utils.getOnlinePlayerNames());
+                    case "aliado", "rival" -> match(args[1], List.of("adicionar", "remover", "lista"));
+                    case "promover", "rebaixar", "expulsar", "confiar" ->
+                            player != null ? match(args[1], Utils.getClanMembersNames(player)) : List.of();
+                    case "admin" -> s.hasPermission("anarchyclans.admin") ? match(args[1], adminCommands()) : List.of();
+                    default -> List.of();
+                };
             }
 
-            case 2 -> switch (sub) {
-                case "membros" -> match(args[1], Utils.getClansTags());
-                case "banco" -> match(args[1], List.of("depositar", "sacar", "saldo"));
-                case "reagrupar" -> match(args[1], List.of("base"));
-                case "base" -> match(args[1], List.of("setar", "teleportar"));
-                case "convidar" -> match(args[1], Utils.getOnlinePlayerNames());
-                case "aliado", "rival" -> match(args[1], List.of("adicionar", "remover", "lista"));
-                case "promover", "rebaixar", "expulsar", "traidor" ->
-                        player != null ? match(args[1], Utils.getClanMembersNames(player)) : List.of();
-                case "guerra", "war" -> {
-                    List<String> warOptions = new ArrayList<>(List.of("aceitar", "recusar"));
-                    if (player != null) {
-                        Clan clan = ClanHandler.getClanByPlayer(player);
-                        if (clan != null) warOptions.addAll(ClanHandler.getRivalsTags(clan));
+            case 3 -> {
+                if (!sub.equals("admin") && !canUsePublic(s, sub)) yield List.of();
+                yield switch (sub) {
+                    case "aliado", "rival" -> player != null ? match(args[2], Utils.getClansTags(player)) : List.of();
+                    case "promover" -> match(args[2], ROLES);
+                    case "banco" -> match(args[2], List.of("<quantidade>"));
+                    case "admin" -> {
+                        if (!s.hasPermission("anarchyclans.admin")) yield List.of();
+                        yield switch (canonical(args[1])) {
+                            case "banco-admin" -> match(args[2], List.of("setar", "tirar", "resetar", "dar", "saldo"));
+                            case "promover-admin", "rebaixar-admin" -> match(args[2], Utils.getOnlinePlayerNames());
+                            case "dados" -> match(args[2], List.of("editar", "deletar", "resetar"));
+                            case "forçar-entrada" -> match(args[2], Utils.getClansTags());
+                            default -> List.of();
+                        };
                     }
-                    yield match(args[1], warOptions);
-                }
-                case "admin" -> s.hasPermission("anarchyclans.admin") ? match(args[1], ADMIN_SUB_COMMANDS) : List.of();
-                default -> List.of();
-            };
-
-            case 3 -> switch (sub) {
-                case "aliado", "rival" -> player != null ? match(args[2], Utils.getClansTags(player)) : List.of();
-                case "promover" -> match(args[2], ROLES);
-                case "banco" -> match(args[2], List.of("<quantidade>"));
-                case "guerra", "war" -> {
-                    String action = args[1].toLowerCase();
-                    yield (action.equals("aceitar") || action.equals("recusar"))
-                            ? match(args[2], Utils.getClansTags())
-                            : List.of();
-                }
-                case "admin" -> {
-                    if (!s.hasPermission("anarchyclans.admin")) yield List.of();
-                    yield switch (args[1].toLowerCase()) {
-                        case "banco-admin" -> match(args[2], List.of("setar", "tirar", "resetar", "dar", "saldo"));
-                        case "fogo-amigo-global" -> match(args[2], List.of("ativar", "desativar"));
-                        case "promover-admin", "rebaixar-admin" -> match(args[2], Utils.getOnlinePlayerNames());
-                        case "dados" -> match(args[2], List.of("editar", "deletar", "resetar"));
-                        case "forçar-entrada", "mural-admin" -> match(args[2], Utils.getClansTags());
-                        default -> List.of();
-                    };
-                }
-                default -> List.of();
-            };
+                    default -> List.of();
+                };
+            }
 
             case 4 -> {
                 if (sub.equals("admin") && s.hasPermission("anarchyclans.admin")) {
-                    yield switch (args[1].toLowerCase()) {
+                    yield switch (canonical(args[1])) {
                         case "dados" -> match(args[3], List.of("jogadores", "clans"));
                         case "banco-admin" -> match(args[3], Utils.getClansTags());
                         case "forçar-entrada" -> match(args[3], Utils.getOnlinePlayerNames());
@@ -114,7 +91,7 @@ public class ClanTabCompleter implements TabCompleter {
 
             case 5 -> {
                 if (sub.equals("admin") && s.hasPermission("anarchyclans.admin")) {
-                    if (args[1].equalsIgnoreCase("dados")) {
+                    if (canonical(args[1]).equals("dados")) {
                         if (args[3].equalsIgnoreCase("clans")) {
                             List<String> clanOptions = new ArrayList<>(Utils.getClansTags());
                             clanOptions.add("todos");
@@ -122,7 +99,7 @@ public class ClanTabCompleter implements TabCompleter {
                         } else if (args[3].equalsIgnoreCase("jogadores")) {
                             yield match(args[4], Utils.getOnlinePlayerNames());
                         }
-                    } else if (args[1].equalsIgnoreCase("banco-admin")) {
+                    } else if (canonical(args[1]).equals("banco-admin")) {
                         yield match(args[4], List.of("<quantidade>"));
                     }
                 }
@@ -131,7 +108,7 @@ public class ClanTabCompleter implements TabCompleter {
 
             case 6 -> {
                 if (sub.equals("admin") && s.hasPermission("anarchyclans.admin")
-                        && args[1].equalsIgnoreCase("dados") && args[2].equalsIgnoreCase("editar")) {
+                        && canonical(args[1]).equals("dados") && args[2].equalsIgnoreCase("editar")) {
                     if (args[3].equalsIgnoreCase("jogadores")) {
                         yield match(args[5], List.of("kills", "role"));
                     } else if (args[3].equalsIgnoreCase("clans")) {
@@ -143,7 +120,7 @@ public class ClanTabCompleter implements TabCompleter {
 
             case 7 -> {
                 if (sub.equals("admin") && s.hasPermission("anarchyclans.admin")
-                        && args[1].equalsIgnoreCase("dados") && args[2].equalsIgnoreCase("editar")
+                        && canonical(args[1]).equals("dados") && args[2].equalsIgnoreCase("editar")
                         && args[3].equalsIgnoreCase("clans") && args[5].equalsIgnoreCase("mudar-lider")) {
                     yield match(args[6], Utils.getOnlinePlayerNames());
                 }
@@ -152,6 +129,43 @@ public class ClanTabCompleter implements TabCompleter {
 
             default -> List.of();
         };
+    }
+
+    private List<String> visibleCommands(CommandSender sender) {
+        List<String> available = new ArrayList<>();
+        available.add("ajuda");
+        for (SubCommand sub : clanCommand.getSubCommands()) {
+            if (sub.getAdminCommand()) continue;
+            if (ClanCommand.canUse(sender, sub)) available.add(sub.getName());
+        }
+        if (sender.hasPermission("anarchyclans.admin")
+                || sender.hasPermission("anarchyclans.reload")
+                || sender.hasPermission("anarchyclans.spy")) {
+            available.add("admin");
+        }
+        available.sort(String.CASE_INSENSITIVE_ORDER);
+        return available;
+    }
+
+    private boolean canUsePublic(CommandSender sender, String name) {
+        return clanCommand.getSubCommand(name)
+                .filter(sub -> !sub.getAdminCommand() && ClanCommand.canUse(sender, sub))
+                .isPresent();
+    }
+
+    private List<String> adminCommands() {
+        List<String> names = new ArrayList<>();
+        for (SubCommand sub : clanCommand.getSubCommands()) {
+            if (sub.getAdminCommand()) names.add(sub.getName());
+        }
+        names.sort(String.CASE_INSENSITIVE_ORDER);
+        return names;
+    }
+
+    private String canonical(String input) {
+        return clanCommand.getSubCommand(input)
+                .map(SubCommand::getName)
+                .orElse(input.toLowerCase());
     }
 
     private List<String> match(String input, Collection<String> possibilities) {

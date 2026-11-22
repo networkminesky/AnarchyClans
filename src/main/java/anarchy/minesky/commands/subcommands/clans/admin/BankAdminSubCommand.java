@@ -30,7 +30,7 @@ public class BankAdminSubCommand extends SubCommand {
 
     @Override
     public List<String> getAliases() {
-        return List.of("bank", "banco");
+        return List.of("bank-admin");
     }
 
     @Override

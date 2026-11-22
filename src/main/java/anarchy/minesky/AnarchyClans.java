@@ -125,10 +125,11 @@ public final class AnarchyClans extends JavaPlugin {
 
     private void registerCommands() {
         l.info("Registrando comandos...");
-        this.getCommand("clan").setExecutor(new ClanCommand(this));
+        ClanCommand clanCommand = new ClanCommand(this);
+        this.getCommand("clan").setExecutor(clanCommand);
         this.getCommand(".").setExecutor(new ClanChatCommand(this, ClanChatType.CLAN));
         this.getCommand("ally").setExecutor(new ClanChatCommand(this, ClanChatType.ALLY));
-        this.getCommand("clan").setTabCompleter(new ClanTabCompleter());
+        this.getCommand("clan").setTabCompleter(new ClanTabCompleter(clanCommand));
     }
 
     private void registerHooks() {
